@@ -99,17 +99,17 @@ your-project/
   └──→ ANALYZE ──→ REFACTOR ──→ MINIMIZE ──→ INTEGRATION TEST ──→ SESSION HANDOFF
 ```
 
-| Phase | What Happens | Who Does the Work |
-|-------|-------------|-------------------|
-| **PLAN** | Define vertical slices. AI challenges tech stack. | Main thread |
-| **REFINE** | AI asks all clarifications + challenges approach. No code. | Main thread |
-| **IMPLEMENT** | Code + unit tests + docs built simultaneously. | Background agents |
-| **CHECKPOINT** | Update tracking, run tests, post-implementation review. | Parallel |
-| **ANALYZE** | Find refactoring opportunities. Revisit past decisions. | Parallel agents |
-| **REFACTOR** | Apply approved changes. | Background agents |
-| **MINIMIZE** | Delete dead code, inline over-abstractions, enforce size budgets. | Background agents |
-| **INTEGRATION TEST** | Test against requirements (not code). | Background agents |
-| **SESSION HANDOFF** | Save state for next session. | Parallel |
+| Phase | What Happens | Models | Agents |
+|-------|-------------|--------|--------|
+| **PLAN** | Define vertical slices. AI challenges tech stack. | Opus (main) | 0-4 |
+| **REFINE** | AI asks all clarifications + challenges approach. No code. | Opus (main) | 0 |
+| **IMPLEMENT** | Code + unit tests + docs built simultaneously. | 2x Sonnet + 1x Haiku | 3 |
+| **CHECKPOINT** | Update tracking, run tests, post-implementation review. | 1x Opus + 1x Sonnet + 2x Haiku | 4 |
+| **ANALYZE** | Find refactoring opportunities. Revisit past decisions. | 4x Opus | 4 |
+| **REFACTOR** | Apply approved changes. | Sonnet (code) + Haiku (docs) | 3-7 |
+| **MINIMIZE** | Delete dead code, inline over-abstractions, enforce size budgets. | 3x Sonnet + 1x Haiku | 4 |
+| **INTEGRATION TEST** | Test against requirements (not code). | 2x Sonnet | 2 |
+| **SESSION HANDOFF** | Save state for next session. | 3x Haiku | 3 |
 
 ---
 
@@ -121,10 +121,26 @@ your-project/
 | 2. SLICE REFINEMENT IS MANDATORY | All questions answered before any code is written |
 | 3. TESTING PROTOCOL | Unit tests per slice, integration tests from requirements after refactoring |
 | 4. BACKGROUND EXECUTION MODEL | Main thread = questions only. Agents do all building. |
-| 5. PARALLELISM | Independent work runs simultaneously |
+| 5. PARALLELISM + MODEL ALLOCATION | Max 4 agents. Opus thinks, Sonnet builds, Haiku records. |
 | 6. MINIMUM CODE — MAXIMUM COVERAGE | Fewest lines that satisfy requirements. Size budgets enforced. |
 | 7. DEVIL'S ADVOCATE | AI challenges decisions using structured format. Records reasoning. |
 | 8. ARCHITECTURE MANIFEST IS SOURCE OF TRUTH | AI reads contracts, not source files. Manifest always current. |
+
+---
+
+## Model Allocation
+
+Every agent dispatch specifies its model. Max 4 agents run simultaneously.
+
+| Model | Work Type | Why |
+|-------|-----------|-----|
+| **Opus** | Architecture, planning, refinement, challenges, analysis | Strongest reasoning for design decisions and trade-off analysis |
+| **Sonnet** | Code implementation, unit tests, integration tests, refactoring | Best balance of speed and code quality for building |
+| **Haiku** | Documentation, manifest updates, session log, tracking files | Fastest and cheapest for structured text updates |
+
+```
+Opus thinks. Sonnet builds. Haiku records.
+```
 
 ---
 
@@ -156,6 +172,12 @@ your-project/
 - Integration tests designed from requirements, not from reading code
 - They verify the spec, not the implementation
 - Refactoring can't silently break what the user expects
+
+**Cost-optimized model allocation**
+- Opus only runs for decisions that need deep reasoning (architecture, challenges, analysis)
+- Sonnet handles the bulk of code generation at lower cost with strong quality
+- Haiku handles all bookkeeping — fast, cheap, and good enough for structured text
+- You don't pay Opus prices for writing documentation or Sonnet prices for updating a markdown table
 
 **Reusable across projects**
 - Copy `.pipeline/`, `CLAUDE.md`, `PIPELINE.md` into any project

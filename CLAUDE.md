@@ -43,13 +43,29 @@
 - The user sees: questions → approvals → progress updates → results
 - The user does NOT wait for code to be written — it happens in background
 
-### Rule 5: PARALLELISM
-- When researching multiple modules or areas, spawn parallel subagents
+### Rule 5: PARALLELISM AND MODEL ALLOCATION
+- **Maximum 4 background agents running simultaneously** — never exceed this limit
+- If more than 4 tasks exist, batch them: run 4, wait for completion, run next batch
 - Always read `.pipeline/codebase-map.md` before scanning source files directly
 - Never re-parse the full codebase if the codebase map is up to date
-- When the phase is ANALYZE, investigate independent areas in parallel
-- Implementation and documentation for a slice are always parallel background tasks
-- When updating tracking files at session end, do all updates in parallel
+
+**Model allocation — MANDATORY for all agent dispatches**:
+
+| Work Type | Model | When Used |
+|-----------|-------|-----------|
+| Architecture, planning, refinement, challenges, analysis | **Opus** | PLAN, REFINE, ANALYZE, Devil's Advocate challenges, post-implementation review |
+| Code implementation, unit tests, integration tests, refactoring | **Sonnet** | IMPLEMENT, REFACTOR, MINIMIZE, test writing and execution |
+| Documentation, manifest updates, session log, tracking files | **Haiku** | Codebase map updates, session handoff, slices.md updates, inline docs |
+
+- When dispatching background agents, ALWAYS specify the model explicitly
+- Example: a typical IMPLEMENT phase dispatches 3 agents simultaneously:
+  - Agent 1 (Sonnet): write implementation code
+  - Agent 2 (Sonnet): write unit tests
+  - Agent 3 (Haiku): update Architecture Manifest and documentation
+- Example: a typical ANALYZE phase dispatches up to 4 agents:
+  - Agents 1-4 (Opus): investigate different areas of the codebase in parallel
+- The main thread orchestrator uses whatever model the session is running on
+- If a task mixes types (e.g., analyze THEN implement), split into separate agents with correct models
 
 ### Rule 6: MINIMUM CODE — MAXIMUM COVERAGE
 - Write the fewest lines of code that fully satisfy the requirements

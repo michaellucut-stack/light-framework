@@ -17,23 +17,26 @@ You never start from zero. AI never invents requirements.
 ## Execution Model
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  MAIN THREAD (what you see and interact with)       │
-│                                                     │
-│  Questions ←→ Your Answers ←→ Progress Updates      │
-│                                                     │
-├─────────────────────────────────────────────────────┤
-│  BACKGROUND AGENTS (parallel, you don't wait)       │
-│                                                     │
-│  ┌──────────────┐  ┌──────────────┐                 │
-│  │ Implementation│  │Documentation │                 │
-│  │ Agent         │  │Agent         │                 │
-│  └──────────────┘  └──────────────┘                 │
-│  ┌──────────────┐  ┌──────────────┐                 │
-│  │ Unit Test    │  │ Integration  │                 │
-│  │ Agent        │  │ Test Agent   │                 │
-│  └──────────────┘  └──────────────┘                 │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│  MAIN THREAD (orchestration only)                        │
+│  Questions ←→ Your Answers ←→ Progress Updates           │
+├──────────────────────────────────────────────────────────┤
+│  BACKGROUND AGENTS (max 4 simultaneous)                  │
+│                                                          │
+│  ┌─────────────────┐  ┌─────────────────┐               │
+│  │ Implementation  │  │ Unit Tests      │               │
+│  │ (Sonnet)        │  │ (Sonnet)        │               │
+│  └─────────────────┘  └─────────────────┘               │
+│  ┌─────────────────┐  ┌─────────────────┐               │
+│  │ Documentation   │  │ Analysis        │               │
+│  │ (Haiku)         │  │ (Opus)          │               │
+│  └─────────────────┘  └─────────────────┘               │
+├──────────────────────────────────────────────────────────┤
+│  MODEL ALLOCATION                                        │
+│  Opus   → architecture, planning, analysis, challenges   │
+│  Sonnet → code, tests, refactoring, minimize             │
+│  Haiku  → docs, manifest, session log, tracking files    │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## File Structure
@@ -72,10 +75,13 @@ and what unit tests should cover. Write to .pipeline/slices.md.
 Ask me questions for anything that isn't obvious.
 
 Before defining slices, challenge my tech stack and architecture choices.
-For each concern, use the CHALLENGE format from Rule 8.
+For each concern, use the CHALLENGE format from Rule 7.
 Only raise challenges that are MATERIAL to this specific project.
 Record confirmed decisions (with reasoning) in CLAUDE.md Active Decisions.
 ```
+
+**Model**: PLAN runs on the main thread. If exploration is needed,
+spawn up to 4 Opus agents in parallel to investigate different areas.
 
 **What AI challenges during PLAN** (examples):
 - "You chose Python/Flask for a game with real-time leaderboard. Flask has no
@@ -103,6 +109,9 @@ Ask me all questions before starting implementation.
 Do NOT write any code until all questions are answered.
 Record my answers AND challenge outcomes in the Clarifications Log.
 ```
+
+**Model**: REFINE runs on the main thread (Opus-level reasoning for challenges).
+No background agents — this is an interactive dialogue.
 
 **What AI does**:
 1. Reads the slice definition and the Architecture Manifest
@@ -134,17 +143,17 @@ You stay in the main thread, free to answer follow-up questions.
 **Tell AI**:
 ```
 All questions for SLICE-XXX are answered. Implement it now.
-Run these as parallel background agents:
-1. Implementation: build the slice bottom-up (DB → service → API → UI)
-2. Unit tests: write tests for each layer based on the slice requirements
-3. Documentation: update inline docs and .pipeline/codebase-map.md
+Run these as parallel background agents (3 agents, max 4):
+1. (Sonnet) Implementation: build the slice bottom-up (DB → service → API → UI)
+2. (Sonnet) Unit tests: write tests for each layer based on the slice requirements
+3. (Haiku)  Documentation: update Architecture Manifest and inline docs
 Report back when all three are done. Ask me if anything is unclear.
 ```
 
 **What happens**:
-- Background Agent 1: writes the code (DB migration → repository → service → API → UI)
-- Background Agent 2: writes unit tests for each layer touched
-- Background Agent 3: updates documentation and codebase map
+- Background Agent 1 **(Sonnet)**: writes the code (DB migration → repository → service → API → UI)
+- Background Agent 2 **(Sonnet)**: writes unit tests for each layer touched
+- Background Agent 3 **(Haiku)**: updates documentation and codebase map
 - Main thread: you're free. AI asks you questions if any come up during implementation
 - When all agents complete: AI reports results and runs tests
 
@@ -158,15 +167,14 @@ Report back when all three are done. Ask me if anything is unclear.
 
 **Tell AI**:
 ```
-SLICE-XXX is done. Do these in parallel:
-1. Update .pipeline/slices.md — mark SLICE-XXX as DONE, record what was built
-2. Update CLAUDE.md — set last completed slice, advance active slice
-3. Run the full unit test suite and report results
-4. Show me git status so I can review before committing
+SLICE-XXX is done. Do these in parallel (4 agents):
+1. (Haiku)  Update .pipeline/slices.md — mark SLICE-XXX as DONE, record what was built
+2. (Haiku)  Update CLAUDE.md — set last completed slice, advance active slice
+3. (Sonnet) Run the full unit test suite and report results
+4. (Opus)   Post-implementation review: is this the simplest implementation that
+            meets the requirements? Flag anything over-engineered. Use CHALLENGE format.
 
-Also: review what was just built. Is this the simplest implementation that
-meets the requirements? Flag anything that looks over-engineered, unnecessarily
-complex, or that could be done in fewer lines. Use the CHALLENGE format.
+Show me git status after all agents complete.
 ```
 
 ```bash
@@ -183,18 +191,12 @@ This is where you prevent architectural rot and **cache your analysis**.
 ```
 Read CLAUDE.md. Phase is now ANALYZE.
 Analyze the codebase for refactoring opportunities.
-Investigate these areas in parallel:
-1. Duplicated code across modules
-2. Consistency of patterns (error handling, validation, responses)
-3. Naming and file organization
-4. Performance concerns
-5. Security issues
-
-Also: challenge whether the current architecture is still right.
-After N slices, patterns that made sense at slice 1 may no longer fit.
-Review Active Decisions in CLAUDE.md — should any be revisited
-given what we've learned? Use the CHALLENGE format for any concerns.
-Only re-open a decision if there's NEW evidence it's wrong.
+Spawn Opus agents in parallel (max 4 at a time, batch if >4):
+1. (Opus) Duplicated code across modules
+2. (Opus) Consistency of patterns (error handling, validation, responses)
+3. (Opus) Naming, file organization, and performance concerns
+4. (Opus) Security issues + review Active Decisions — should any be
+          revisited given new evidence? Use CHALLENGE format.
 
 Write findings to .pipeline/analysis/refactoring-NNN.md.
 For each finding, ask me if you're unsure whether it's a real issue
@@ -211,11 +213,13 @@ or an intentional design choice. Do not assume.
 ```
 Read .pipeline/analysis/refactoring-NNN.md.
 I approve items: [1, 3, 5]. Skip items: [2, 4].
-Apply approved refactoring as parallel background agents (one per item).
-After all changes, in parallel:
-1. Run unit tests — everything must still pass
-2. Update .pipeline/codebase-map.md with the new architecture
-3. Update CLAUDE.md Architecture Snapshot
+Apply approved refactoring as parallel background agents (max 4):
+- (Sonnet) One agent per approved refactoring item (batch if >4 items)
+
+After all refactoring agents complete, run in parallel (3 agents):
+1. (Sonnet) Run unit tests — everything must still pass
+2. (Haiku)  Update .pipeline/codebase-map.md with the new architecture
+3. (Haiku)  Update CLAUDE.md Architecture Snapshot
 ```
 
 ### Phase 7: MINIMIZE (mandatory after each refactoring)
@@ -229,15 +233,12 @@ and could be inlined. This phase actively looks for code to DELETE.
 **Tell AI**:
 ```
 Read CLAUDE.md and the Architecture Manifest (.pipeline/codebase-map.md).
-Phase is now MINIMIZE. Investigate in parallel:
+Phase is now MINIMIZE. Spawn Sonnet agents in parallel (max 4):
 
-1. Dead code: functions/variables/imports never called or used
-2. Over-abstraction: utilities, helpers, or base classes used only once — inline them
-3. Premature generalization: config options nobody changes, parameters always
-   passed the same value, generic code with only one concrete use
-4. Redundant layers: modules that just pass through to another module with
-   no added logic — collapse them
-5. Size budget: update line counts per module, flag any that exceed budget
+1. (Sonnet) Dead code: functions/variables/imports never called or used
+2. (Sonnet) Over-abstraction: utilities/helpers used only once — inline them
+3. (Sonnet) Premature generalization + redundant pass-through layers
+4. (Haiku)  Size budget: update line counts per module, flag any exceeding budget
 
 For each finding, state what you'd delete/simplify and how many lines it saves.
 Ask me before deleting anything that might be intentional.
@@ -269,9 +270,10 @@ Design and implement integration tests based on the REQUIREMENTS, not the code.
 Each test should verify an end-to-end user flow described in the slice definitions.
 Do NOT read src/ to design these tests — only read requirements.
 
-Run as parallel background agents:
-1. Write integration tests based on slice requirements
-2. Execute the integration tests and report results
+Run as parallel background agents (2 agents):
+1. (Sonnet) Write integration tests based on slice requirements
+2. (Sonnet) Execute the integration tests and report results
+   (Agent 2 waits for Agent 1 to complete, then runs tests)
 
 Ask me if any requirement is ambiguous for testing purposes.
 ```
@@ -285,10 +287,10 @@ Ask me if any requirement is ambiguous for testing purposes.
 
 **Tell AI**:
 ```
-Session wrap-up. Do these as parallel background agents:
-1. Write a handoff entry to .pipeline/session-log.md
-2. Update .pipeline/slices.md with current statuses
-3. Update CLAUDE.md current state section
+Session wrap-up. Do these as parallel background agents (3 Haiku agents):
+1. (Haiku) Write a handoff entry to .pipeline/session-log.md
+2. (Haiku) Update .pipeline/slices.md with current statuses
+3. (Haiku) Update CLAUDE.md current state section
 Then show me git status so I can review before committing.
 ```
 
@@ -324,41 +326,44 @@ Pick up where we left off."
 ```
 "Read CLAUDE.md. Refine SLICE-XXX. Ask me all questions before coding.
 Record answers in the Clarifications Log."
+(Runs on main thread — Opus-level reasoning for challenges)
 ```
 
 ### Implementing a slice (after refinement)
 ```
-"Implement SLICE-XXX as parallel background agents:
-implementation, unit tests, and documentation.
+"Implement SLICE-XXX with 3 parallel background agents:
+1. (Sonnet) implementation
+2. (Sonnet) unit tests
+3. (Haiku) documentation + Architecture Manifest
 Ask me if anything is unclear."
 ```
 
 ### Triggering analysis
 ```
-"Analyze the codebase in parallel:
-duplications, patterns, naming, performance, security.
-Write to .pipeline/analysis/refactoring-NNN.md.
-Ask me about anything you're unsure of."
+"Analyze codebase with 4 parallel Opus agents:
+1. (Opus) duplications  2. (Opus) patterns
+3. (Opus) naming+perf   4. (Opus) security+decisions review
+Write to .pipeline/analysis/refactoring-NNN.md."
 ```
 
 ### Minimizing code after refactoring
 ```
-"MINIMIZE phase. Investigate in parallel: dead code, over-abstraction,
-premature generalization, redundant layers, size budget.
-For each finding, state what to delete and lines saved.
-Ask me before removing anything that might be intentional."
+"MINIMIZE with 4 parallel agents:
+1. (Sonnet) dead code  2. (Sonnet) over-abstraction
+3. (Sonnet) premature generalization  4. (Haiku) size budget update
+Ask me before removing anything intentional."
 ```
 
 ### Running integration tests after minimize
 ```
-"Design integration tests from requirements in slices.md (not from code).
-Run them in background and report results."
+"Design integration tests from requirements (not code):
+1. (Sonnet) write tests  2. (Sonnet) execute and report
 ```
 
 ### Ending a session
 ```
-"Session wrap-up in parallel background agents:
-session-log, slices status, CLAUDE.md update.
+"Session wrap-up with 3 parallel Haiku agents:
+1. (Haiku) session-log  2. (Haiku) slices status  3. (Haiku) CLAUDE.md
 Then show git status."
 ```
 
